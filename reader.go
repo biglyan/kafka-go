@@ -1323,6 +1323,11 @@ func (r *reader) run(ctx context.Context, offset int64) {
 			}
 
 			offset, err = r.read(ctx, offset, conn)
+			r.withLogger(func(log Logger) {
+				log.Printf("read msg from kafka for partition %d of %s at offset %d, err: %v",
+					r.partition, r.topic, toHumanOffset(offset), err)
+			})
+
 			switch {
 			case err == nil:
 				errcount = 0
