@@ -1177,6 +1177,10 @@ func (r *Reader) readLag(ctx context.Context) {
 }
 
 func (r *Reader) start(offsetsByPartition map[topicPartition]int64) {
+	r.withLogger(func(l Logger) {
+		l.Printf("start to read: %v", offsetsByPartition)
+	})
+
 	if r.closed {
 		// don't start child reader if parent Reader is closed
 		return
@@ -1215,6 +1219,11 @@ func (r *Reader) start(offsetsByPartition map[topicPartition]int64) {
 				// backwards-compatibility flags
 				offsetOutOfRangeError: r.config.OffsetOutOfRangeError,
 			}).run(ctx, offset)
+
+			r.withLogger(func(log Logger) {
+				log.Printf("exit the kafka reader goroutine for partition %d of %s starting at offset %d, attempt: %d",
+					int(key.partition), key.topic, toHumanOffset(offset))
+			})
 		}(ctx, key, offset, &r.join)
 	}
 }
@@ -1264,6 +1273,10 @@ func (r *reader) run(ctx context.Context, offset int64) {
 	for attempt := 0; true; attempt++ {
 		if attempt != 0 {
 			if !sleep(ctx, backoff(attempt, r.backoffDelayMin, r.backoffDelayMax)) {
+				r.withLogger(func(log Logger) {
+					log.Printf("exit the kafka reader for partition %d of %s starting at offset %d, attempt: %d",
+						r.partition, r.topic, toHumanOffset(offset), attempt)
+				})
 				return
 			}
 		}
@@ -1273,6 +1286,11 @@ func (r *reader) run(ctx context.Context, offset int64) {
 		})
 
 		conn, start, err := r.initialize(ctx, offset)
+		r.withLogger(func(log Logger) {
+			log.Printf("initializing for partition %d of %s starting at offset %d, start: %d, err: %v",
+				r.partition, r.topic, toHumanOffset(offset), toHumanOffset(start), err)
+		})
+
 		if err != nil {
 			if errors.Is(err, OffsetOutOfRange) {
 				if r.offsetOutOfRangeError {
@@ -1318,6 +1336,12 @@ func (r *reader) run(ctx context.Context, offset int64) {
 	readLoop:
 		for {
 			if !sleep(ctx, backoff(errcount, r.backoffDelayMin, r.backoffDelayMax)) {
+				r.withLogger(func(log Logger) {
+					log.Printf("exit the kafka reader loop for partition %d of %s starting at offset %d, errcount: %d",
+						r.partition, r.topic, toHumanOffset(offset), errcount)
+					log.Printf("close the kafka reader conn for partition %d of %s starting at offset %d",
+						r.partition, r.topic, toHumanOffset(offset))
+				})
 				conn.Close()
 				return
 			}
