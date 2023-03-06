@@ -856,6 +856,10 @@ func (r *Reader) FetchMessage(ctx context.Context) (Message, error) {
 				}
 
 				return m.message, m.error
+			} else {
+				r.withLogger(func(l Logger) {
+					l.Printf("invalid version, m.version: %d, reader version: %d, msg: %v", m.version, version, m)
+				})
 			}
 		}
 	}
@@ -1571,8 +1575,8 @@ func (r *reader) read(ctx context.Context, offset int64, conn *Conn) (int64, err
 		r.stats.bytes.observe(n)
 
 		r.withLogger(func(log Logger) {
-			log.Printf("star to send message from kafka for partition %d of %s at offset %d",
-				r.partition, r.topic, toHumanOffset(offset))
+			log.Printf("star to send message from kafka for partition %d of %s at offset %d, msg: %v",
+				r.partition, r.topic, toHumanOffset(offset), msg)
 		})
 		if err = r.sendMessage(ctx, msg, highWaterMark); err != nil {
 			r.withLogger(func(log Logger) {
