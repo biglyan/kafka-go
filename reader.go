@@ -1221,7 +1221,7 @@ func (r *Reader) start(offsetsByPartition map[topicPartition]int64) {
 			}).run(ctx, offset)
 
 			r.withLogger(func(log Logger) {
-				log.Printf("exit the kafka reader goroutine for partition %d of %s starting at offset %d, attempt: %d",
+				log.Printf("exit the kafka reader goroutine for partition %d of %s starting at offset %d",
 					int(key.partition), key.topic, toHumanOffset(offset))
 			})
 		}(ctx, key, offset, &r.join)
@@ -1346,6 +1346,10 @@ func (r *reader) run(ctx context.Context, offset int64) {
 				return
 			}
 
+			r.withLogger(func(log Logger) {
+				log.Printf("start to read msg from kafka for partition %d of %s at offset %d",
+					r.partition, r.topic, toHumanOffset(offset))
+			})
 			offset, err = r.read(ctx, offset, conn)
 			r.withLogger(func(log Logger) {
 				log.Printf("read msg from kafka for partition %d of %s at offset %d, err: %v",
@@ -1370,6 +1374,11 @@ func (r *reader) run(ctx context.Context, offset int64) {
 				// has been corrupted, so we need to explicitly close it. Since we are
 				// explicitly handling it and a retry will pick up, we can suppress the
 				// error metrics and logs for this case.
+				r.withErrorLogger(func(log Logger) {
+					log.Printf("failed to read from current conn for partition %d of %s at offset %d, err: %v",
+						r.partition, r.topic, toHumanOffset(offset), err)
+				})
+
 				conn.Close()
 				break readLoop
 
@@ -1537,21 +1546,46 @@ func (r *reader) read(ctx context.Context, offset int64, conn *Conn) (int64, err
 	var bytes int64
 
 	for {
+		r.withLogger(func(log Logger) {
+			log.Printf("start to read message from kafka for partition %d of %s at offset %d",
+				r.partition, r.topic, toHumanOffset(offset))
+		})
+
 		conn.SetReadDeadline(time.Now().Add(r.readBatchTimeout))
 
 		if msg, err = batch.ReadMessage(); err != nil {
+			r.withLogger(func(log Logger) {
+				log.Printf("end to read message from kafka for partition %d of %s at offset %d, err: %v",
+					r.partition, r.topic, toHumanOffset(offset), err)
+			})
 			batch.Close()
 			break
 		}
+		r.withLogger(func(log Logger) {
+			log.Printf("end to read message from kafka for partition %d of %s at offset %d",
+				r.partition, r.topic, toHumanOffset(offset))
+		})
 
 		n := int64(len(msg.Key) + len(msg.Value))
 		r.stats.messages.observe(1)
 		r.stats.bytes.observe(n)
 
+		r.withLogger(func(log Logger) {
+			log.Printf("star to send message from kafka for partition %d of %s at offset %d",
+				r.partition, r.topic, toHumanOffset(offset))
+		})
 		if err = r.sendMessage(ctx, msg, highWaterMark); err != nil {
+			r.withLogger(func(log Logger) {
+				log.Printf("end to send message from kafka for partition %d of %s at offset %d, err: %v",
+					r.partition, r.topic, toHumanOffset(offset), err)
+			})
 			batch.Close()
 			break
 		}
+		r.withLogger(func(log Logger) {
+			log.Printf("end to send message from kafka for partition %d of %s at offset %d",
+				r.partition, r.topic, toHumanOffset(offset))
+		})
 
 		offset = msg.Offset + 1
 		r.stats.offset.observe(offset)
