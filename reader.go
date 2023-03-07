@@ -824,7 +824,7 @@ func (r *Reader) FetchMessage(ctx context.Context) (Message, error) {
 		r.mutex.Unlock()
 
 		r.withLogger(func(l Logger) {
-			l.Printf("FetchMessage[before], len: %d, cap: %d, %p", len(r.msgs), cap(r.msgs), &(r.msgs))
+			l.Printf("FetchMessage[before], len: %d, cap: %d, &r.msgs: %p", len(r.msgs), cap(r.msgs), r.msgs)
 		})
 
 		select {
@@ -1551,8 +1551,8 @@ func (r *reader) read(ctx context.Context, offset int64, conn *Conn) (int64, err
 
 	for {
 		r.withLogger(func(log Logger) {
-			log.Printf("batch.ReadMessage[before] for partition %d of %s at offset %d, r: %p",
-				r.partition, r.topic, toHumanOffset(offset), &(r.msgs))
+			log.Printf("batch.ReadMessage[before] for partition %d of %s at offset %d, &r.msgs: %p",
+				r.partition, r.topic, toHumanOffset(offset), r.msgs)
 		})
 
 		conn.SetReadDeadline(time.Now().Add(r.readBatchTimeout))
